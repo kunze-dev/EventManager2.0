@@ -138,6 +138,20 @@
   .dot.k1 { background: var(--k1-fg); } .dot.k2 { background: var(--k2-fg); } .dot.k3 { background: var(--k3-fg); }
   .cal-day.sel .dot { background: var(--accent-fg); }
   .cal-hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+
+  /* Benutzergruppen */
+  .grp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .grp { border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .grp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .grp-head h3 { flex: 1; min-width: 0; margin: 0; font-family: var(--font-display); font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+  .grp ul { gap: 2px; }
+  .grp .person { padding: 3px 0; }
+  .grp .avatar { width: 30px; height: 30px; font-size: 0.75rem; }
+  .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+  .info .badge { font-size: 0.68rem; font-weight: 500; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0 8px; }
+  .invite-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .chip { background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; font-size: 0.85rem; font-weight: 500; }
+  .chip:hover { border-color: var(--accent); }
   footer { color: var(--muted); font-size: 0.8rem; }
 </style>
 
@@ -186,10 +200,22 @@
             <button class="primary" type="submit">Hinzufügen</button>
           </div>
         </form>
+        <div id="invite"></div>
         <ul id="personList"></ul>
       </div>
     </section>
   </div>
+
+  <section class="pane" aria-labelledby="hGroups">
+    <h2 id="hGroups">Benutzergruppen</h2>
+    <form id="groupForm" autocomplete="off" style="display:block">
+      <div class="inline">
+        <input id="grName" required maxlength="40" placeholder="Neue Gruppe, z. B. Azubis 2026" aria-label="Name der Gruppe">
+        <button class="primary" type="submit">Gruppe erstellen</button>
+      </div>
+    </form>
+    <div class="grp-grid" id="groupGrid"></div>
+  </section>
 
   <footer>Beispieldaten zum Start, alles frei löschbar. Die Daten bleiben in diesem Browser gespeichert.</footer>
 </div>
@@ -212,12 +238,18 @@
       { id: uid(), title: "Spieleabend", date: iso(3), place: "Düsseldorf", people: [P("Lena Hoffmann"), P("Tobias Kern"), P("Aylin Demir")] },
       { id: uid(), title: "Weihnachtsfeier", date: iso(21), place: "Köln", people: [P("Marc Vogel"), P("Lena Hoffmann"), P("Jonas Aydin"), P("Mia Becker")] },
       { id: uid(), title: "Silvesterparty", date: iso(51), place: "Online", people: [P("Tobias Kern")] }
-    ] };
+    ], groups: seedGroups() };
+  }
+  function seedGroups() {
+    return [
+      { id: uid(), name: "Azubis 2026", members: [P("Lena Hoffmann"), P("Mia Becker")] },
+      { id: uid(), name: "Anwendungsentwickler", members: [P("Tobias Kern"), P("Jonas Aydin"), P("Aylin Demir")] }
+    ];
   }
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (raw) { var s = JSON.parse(raw); if (s && s.events) return s; }
+      if (raw) { var s = JSON.parse(raw); if (s && s.events) { if (!s.groups) s.groups = seedGroups(); return s; } }
     } catch (e) {}
     return seed();
   }
@@ -267,6 +299,22 @@
     document.getElementById("calGrid").innerHTML = h;
   }
 
+  function gById(id) { return state.groups.find(function (g) { return g.id === id; }); }
+  function sameName(a, b) { return a.trim().toLowerCase() === b.trim().toLowerCase(); }
+  function groupsOf(name) { return state.groups.filter(function (g) { return g.members.some(function (m) { return sameName(m.name, name); }); }); }
+  function renderGroups() {
+    document.getElementById("groupGrid").innerHTML = state.groups.length ? state.groups.map(function (g) {
+      var n = g.members.length;
+      return '<div class="grp"><div class="grp-head"><h3>' + esc(g.name) + '</h3><span class="count">' + (n === 1 ? "1 Mitglied" : n + " Mitglieder") + '</span>' +
+        '<button class="del" type="button" data-del-group="' + g.id + '" aria-label="Gruppe ' + esc(g.name) + ' löschen">Löschen</button></div>' +
+        '<ul>' + (n ? g.members.map(function (m) {
+          return '<li class="person"><span class="avatar k' + ci(m.id) + '">' + esc(initials(m.name)) + '</span><span class="info"><strong>' + esc(m.name) + '</strong></span>' +
+            '<button class="del" type="button" data-del-member="' + g.id + ':' + m.id + '" aria-label="' + esc(m.name) + ' aus ' + esc(g.name) + ' entfernen">Entfernen</button></li>';
+        }).join("") : '<li><p class="empty">Noch keine Mitglieder.</p></li>') + '</ul>' +
+        '<form data-add-member="' + g.id + '" autocomplete="off" style="display:block"><div class="inline"><input required maxlength="60" placeholder="Mitglied hinzufügen" aria-label="Mitglied zu ' + esc(g.name) + ' hinzufügen"><button class="primary" type="submit">+</button></div></form></div>';
+    }).join("") : '<p class="empty">Noch keine Gruppen. Lege oben die erste an, z. B. Azubis 2026.</p>';
+  }
+
   function render() {
     var sel = byId(selectedId);
     if (!sel) selectedId = null;
@@ -293,15 +341,20 @@
       '<span class="when' + (w.past ? ' past' : '') + '">' + w.t + '</span></div>' +
       '<button class="del" type="button" data-del-event="' + sel.id + '" aria-label="Event ' + esc(sel.title) + ' löschen">Event löschen</button></div>';
     document.getElementById("count").textContent = plural(sel.people.length);
+    document.getElementById("invite").innerHTML = state.groups.length ? '<div class="invite-row"><span class="count">Gruppe einladen:</span>' + state.groups.map(function (g) {
+      return '<button type="button" class="chip" data-invite="' + g.id + '">' + esc(g.name) + ' · ' + g.members.length + '</button>';
+    }).join("") + '</div>' : "";
     document.getElementById("personList").innerHTML = sel.people.length ? sel.people.map(function (p) {
       return '<li class="person"><span class="avatar k' + ci(p.id) + '">' + esc(initials(p.name)) + '</span>' +
-        '<span class="info"><strong>' + esc(p.name) + '</strong></span>' +
+        '<span class="info"><strong>' + esc(p.name) + '</strong>' +
+        (groupsOf(p.name).length ? '<span class="badges">' + groupsOf(p.name).map(function (g) { return '<span class="badge">' + esc(g.name) + '</span>'; }).join("") + '</span>' : '') + '</span>' +
         '<button class="del" type="button" data-del-person="' + p.id + '" aria-label="' + esc(p.name) + ' entfernen">Entfernen</button></li>';
     }).join("") : '<li><p class="empty">Noch niemand eingeladen. Füge oben den ersten Namen hinzu.</p></li>';
   }
 
-  function showToast(text) {
+  function showToast(text, noUndo) {
     document.getElementById("toastText").textContent = text;
+    document.getElementById("undoBtn").hidden = !!noUndo;
     document.getElementById("toast").hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { document.getElementById("toast").hidden = true; lastDeleted = null; }, 6000);
@@ -341,11 +394,56 @@
       sel.people = sel.people.filter(function (x) { return x.id !== t.dataset.delPerson; });
       lastDeleted = { type: "person", eventId: sel.id, item: p };
       save(); render(); showToast("Teilnehmer entfernt");
+    } else if (t.dataset.delGroup) {
+      var g = gById(t.dataset.delGroup); if (!g) return;
+      lastDeleted = { type: "group", item: g };
+      state.groups = state.groups.filter(function (x) { return x.id !== g.id; });
+      save(); renderGroups(); render(); showToast("Gruppe gelöscht");
+    } else if (t.dataset.delMember) {
+      var ids = t.dataset.delMember.split(":"), gm = gById(ids[0]); if (!gm) return;
+      var mem = gm.members.find(function (x) { return x.id === ids[1]; });
+      gm.members = gm.members.filter(function (x) { return x.id !== ids[1]; });
+      lastDeleted = { type: "member", groupId: gm.id, item: mem };
+      save(); renderGroups(); render(); showToast("Mitglied entfernt");
+    } else if (t.dataset.invite && sel) {
+      var gi = gById(t.dataset.invite); if (!gi) return;
+      var added = [];
+      gi.members.forEach(function (m) {
+        if (!sel.people.some(function (p) { return sameName(p.name, m.name); })) { var np = P(m.name); sel.people.push(np); added.push(np.id); }
+      });
+      save(); render();
+      if (added.length) { lastDeleted = { type: "bulk", eventId: sel.id, ids: added }; showToast(added.length + (added.length === 1 ? " Person" : " Personen") + " aus " + gi.name + " hinzugefügt"); }
+      else { lastDeleted = null; showToast("Alle aus " + gi.name + " sind schon dabei", true); }
     } else if (t.id === "undoBtn" && lastDeleted) {
-      if (lastDeleted.type === "event") { state.events.push(lastDeleted.item); selectedId = lastDeleted.item.id; }
-      else { var ev = byId(lastDeleted.eventId); if (ev) ev.people.push(lastDeleted.item); }
-      lastDeleted = null; document.getElementById("toast").hidden = true; save(); render();
+      var u = lastDeleted;
+      if (u.type === "event") { state.events.push(u.item); selectedId = u.item.id; }
+      else if (u.type === "group") { state.groups.push(u.item); }
+      else if (u.type === "member") { var ug = gById(u.groupId); if (ug) ug.members.push(u.item); }
+      else if (u.type === "bulk") { var ue = byId(u.eventId); if (ue) ue.people = ue.people.filter(function (x) { return u.ids.indexOf(x.id) < 0; }); }
+      else { var ev = byId(u.eventId); if (ev) ev.people.push(u.item); }
+      lastDeleted = null; document.getElementById("toast").hidden = true; save(); renderGroups(); render();
     }
+  });
+
+  document.getElementById("groupForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = document.getElementById("grName").value.trim();
+    if (!name) return;
+    if (state.groups.some(function (g) { return sameName(g.name, name); })) { showToast("Diese Gruppe gibt es schon", true); return; }
+    state.groups.push({ id: uid(), name: name, members: [] });
+    save(); renderGroups(); render(); e.target.reset();
+    var ni = document.querySelector('[data-add-member="' + state.groups[state.groups.length - 1].id + '"] input'); if (ni) ni.focus();
+  });
+
+  document.addEventListener("submit", function (e) {
+    var f = e.target; if (!f.dataset || !f.dataset.addMember) return;
+    e.preventDefault();
+    var g = gById(f.dataset.addMember), name = f.querySelector("input").value.trim();
+    if (!g || !name) return;
+    if (g.members.some(function (m) { return sameName(m.name, name); })) { showToast(name + " ist schon in der Gruppe", true); return; }
+    g.members.push(P(name));
+    save(); renderGroups(); render();
+    var ni = document.querySelector('[data-add-member="' + g.id + '"] input'); if (ni) ni.focus();
   });
 
   document.getElementById("cal").addEventListener("click", function (e) {
@@ -372,6 +470,7 @@
 
   document.getElementById("evDate").value = iso(0);
   if (wide() && state.events.length) selectedId = sorted()[0].id;
+  renderGroups();
   render();
 </script>
 
