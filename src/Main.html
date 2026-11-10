@@ -117,6 +117,27 @@
 
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg); border-radius: 12px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; box-shadow: 0 6px 24px rgba(0,0,0,0.2); max-width: calc(100% - 32px); }
   .toast button { background: none; border: 0; color: inherit; font-weight: 600; padding: 0; text-decoration: underline; }
+
+  /* Kalender */
+  .cal { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .cal-head { display: flex; align-items: center; gap: 6px; }
+  .cal-head h2 { flex: 1; font-size: 1rem; text-transform: capitalize; }
+  .cal-nav { background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 8px; min-width: 32px; height: 32px; padding: 0 8px; font-size: 0.85rem; }
+  .cal-nav:hover { background: var(--bg); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+  .cal-dow { text-align: center; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 0; }
+  .cal-day { position: relative; aspect-ratio: 1 / 1; min-height: 38px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; color: var(--fg); border: 1px solid transparent; border-radius: 10px; padding: 0; font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+  .cal-day:hover { background: var(--bg); }
+  .cal-day.out { color: var(--muted); opacity: 0.45; }
+  .cal-day.today { border-color: var(--accent); font-weight: 700; color: var(--accent); }
+  .cal-day.has { background: var(--accent-soft); font-weight: 600; }
+  .cal-day.sel { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .cal-day.pick { outline: 2px dashed var(--accent); outline-offset: -2px; }
+  .dots { display: flex; gap: 2px; height: 5px; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--k0-fg); }
+  .dot.k1 { background: var(--k1-fg); } .dot.k2 { background: var(--k2-fg); } .dot.k3 { background: var(--k3-fg); }
+  .cal-day.sel .dot { background: var(--accent-fg); }
+  .cal-hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
   footer { color: var(--muted); font-size: 0.8rem; }
 </style>
 
@@ -141,6 +162,16 @@
         </label>
         <button class="primary full" type="submit">Event erstellen</button>
       </form>
+      <div class="cal" id="cal" aria-label="Kalender">
+        <div class="cal-head">
+          <h2 id="calTitle" aria-live="polite"></h2>
+          <button class="cal-nav" type="button" data-cal="today">Heute</button>
+          <button class="cal-nav" type="button" data-cal="-1" aria-label="Vorheriger Monat">‹</button>
+          <button class="cal-nav" type="button" data-cal="1" aria-label="Nächster Monat">›</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <p class="cal-hint">Tag mit Punkt: Event öffnen. Leerer Tag: Datum fürs neue Event übernehmen.</p>
+      </div>
       <ul id="eventList"></ul>
     </section>
 
@@ -213,9 +244,34 @@
     return '<span class="tile k' + ci(e.id) + '"><b>' + d.getDate() + '</b><small>' + esc(mon) + '</small></span>';
   }
 
+  var lastCalSync = null, calY = new Date().getFullYear(), calM = new Date().getMonth(), calPick = null;
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function dstr(y, m, d) { return y + "-" + pad(m + 1) + "-" + pad(d); }
+  function renderCal() {
+    var first = new Date(calY, calM, 1);
+    document.getElementById("calTitle").textContent = first.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+    var offset = (first.getDay() + 6) % 7; // Woche beginnt am Montag
+    var start = new Date(calY, calM, 1 - offset);
+    var todayS = iso(0), sel = byId(selectedId);
+    var h = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(function (d) { return '<div class="cal-dow" aria-hidden="true">' + d + '</div>'; }).join("");
+    for (var i = 0; i < 42; i++) {
+      var d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      var ds = dstr(d.getFullYear(), d.getMonth(), d.getDate());
+      var evs = state.events.filter(function (e) { return e.date === ds; });
+      var cls = "cal-day" + (d.getMonth() !== calM ? " out" : "") + (ds === todayS ? " today" : "") + (evs.length ? " has" : "") +
+        (sel && sel.date === ds ? " sel" : "") + (calPick === ds && !evs.length ? " pick" : "");
+      var label = d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) + (evs.length ? ", " + evs.length + (evs.length === 1 ? " Event" : " Events") : "");
+      h += '<button type="button" class="' + cls + '" data-day="' + ds + '" aria-label="' + esc(label) + '"' + (ds === todayS ? ' aria-current="date"' : '') + '>' + d.getDate() +
+        '<span class="dots">' + evs.slice(0, 3).map(function (e) { return '<i class="dot k' + ci(e.id) + '"></i>'; }).join("") + '</span></button>';
+    }
+    document.getElementById("calGrid").innerHTML = h;
+  }
+
   function render() {
     var sel = byId(selectedId);
     if (!sel) selectedId = null;
+    if (sel && sel.date !== lastCalSync) { var cd = new Date(sel.date + "T00:00:00"); calY = cd.getFullYear(); calM = cd.getMonth(); lastCalSync = sel.date; }
+    renderCal();
     document.getElementById("layout").classList.toggle("has-sel", !!sel);
 
     var list = sorted();
@@ -289,6 +345,28 @@
       if (lastDeleted.type === "event") { state.events.push(lastDeleted.item); selectedId = lastDeleted.item.id; }
       else { var ev = byId(lastDeleted.eventId); if (ev) ev.people.push(lastDeleted.item); }
       lastDeleted = null; document.getElementById("toast").hidden = true; save(); render();
+    }
+  });
+
+  document.getElementById("cal").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.cal) {
+      if (b.dataset.cal === "today") { calY = new Date().getFullYear(); calM = new Date().getMonth(); }
+      else { var d = new Date(calY, calM + parseInt(b.dataset.cal, 10), 1); calY = d.getFullYear(); calM = d.getMonth(); }
+      renderCal(); return;
+    }
+    if (b.dataset.day) {
+      var ds = b.dataset.day, evs = state.events.filter(function (x) { return x.date === ds; });
+      var dd = new Date(ds + "T00:00:00");
+      if (dd.getMonth() !== calM) { calY = dd.getFullYear(); calM = dd.getMonth(); }
+      if (evs.length) {
+        var i = evs.findIndex(function (x) { return x.id === selectedId; });
+        selectedId = evs[(i + 1) % evs.length].id; calPick = null;
+        render(); if (!wide()) window.scrollTo(0, 0);
+      } else {
+        calPick = ds; document.getElementById("evDate").value = ds; renderCal();
+        document.getElementById("evTitle").focus();
+      }
     }
   });
 
