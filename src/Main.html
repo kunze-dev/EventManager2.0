@@ -152,6 +152,12 @@
   .invite-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   .chip { background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; font-size: 0.85rem; font-weight: 500; }
   .chip:hover { border-color: var(--accent); }
+  /* Event-Bilder */
+  .cover { width: 100%; aspect-ratio: 16 / 7; object-fit: cover; border-radius: 12px; display: block; background: var(--accent-soft); }
+  .thumb { flex: none; width: 48px; height: 48px; border-radius: 10px; object-fit: cover; background: var(--accent-soft); }
+  .img-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .img-actions button { background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 8px; padding: 4px 10px; font-size: 0.8rem; }
+  .img-actions button:hover { border-color: var(--accent); color: var(--accent); }
   footer { color: var(--muted); font-size: 0.8rem; }
 </style>
 
@@ -173,6 +179,9 @@
         </label>
         <label for="evPlace">Ort
           <input id="evPlace" maxlength="60" placeholder="z. B. Düsseldorf">
+        </label>
+        <label class="full" for="evImg">Bild (optional)
+          <input id="evImg" type="file" accept="image/*">
         </label>
         <button class="primary full" type="submit">Event erstellen</button>
       </form>
@@ -220,6 +229,7 @@
   <footer>Beispieldaten zum Start, alles frei löschbar. Die Daten bleiben in diesem Browser gespeichert.</footer>
 </div>
 
+<input id="imgInput" type="file" accept="image/*" hidden>
 <div class="toast" id="toast" hidden><span id="toastText"></span><button id="undoBtn" type="button">Rückgängig</button></div>
 
 <script>
@@ -299,6 +309,63 @@
     document.getElementById("calGrid").innerHTML = h;
   }
 
+  /* Prototyp-Bilder: passende Illustration je nach Titel, oder eigenes Bild */
+  function themeOf(t) {
+    t = (t || "").toLowerCase();
+    if (/spiel|game|zock|lan\b/.test(t)) return "games";
+    if (/weihnacht|xmas|advent|nikolaus/.test(t)) return "xmas";
+    if (/silvester|neujahr|new year|feuerwerk/.test(t)) return "fire";
+    if (/geburtstag|birthday|jubil/.test(t)) return "cake";
+    if (/sommer|grill|bbq|strand|picknick|ausflug|festival/.test(t)) return "sun";
+    return "party";
+  }
+  function art(k) {
+    var bg = { games: ["#5b6cff", "#a06bff"], xmas: ["#0f3d2e", "#1f7a58"], fire: ["#0b1030", "#2d1760"], cake: ["#ff9ac1", "#ffd37a"], sun: ["#5cc8ff", "#ffe39a"], party: ["#ff7fb0", "#ffb86b"] }[k];
+    var b = "";
+    if (k === "games") {
+      [[200, 150, -14], [420, 130, 12]].forEach(function (d) {
+        b += '<g transform="translate(' + d[0] + ' ' + d[1] + ') rotate(' + d[2] + ')"><rect x="-60" y="-60" width="120" height="120" rx="22" fill="#fff"/>' +
+          [[-28, -28], [28, 28], [0, 0], [28, -28], [-28, 28]].slice(0, d[2] < 0 ? 3 : 5).map(function (p) { return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="9" fill="#3a2fa8"/>'; }).join("") + '</g>';
+      });
+    } else if (k === "xmas") {
+      b = '<polygon points="320,30 410,120 370,120 440,200 340,200 340,250 300,250 300,200 200,200 270,120 230,120" fill="#2fb36d"/><polygon points="320,10 328,30 350,32 333,46 338,68 320,56 302,68 307,46 290,32 312,30" fill="#ffd84d" transform="translate(0 -4)"/>' +
+        '<circle cx="290" cy="150" r="9" fill="#e8394d"/><circle cx="350" cy="180" r="9" fill="#e8394d"/><circle cx="325" cy="110" r="8" fill="#ffd84d"/>' +
+        [60, 140, 520, 580, 470, 110, 560].map(function (x, i) { return '<circle cx="' + x + '" cy="' + (30 + i * 33) + '" r="5" fill="#fff" opacity=".85"/>'; }).join("");
+    } else if (k === "fire") {
+      [[190, 110, "#ff6b9d"], [330, 80, "#ffd84d"], [460, 150, "#6be3ff"]].forEach(function (c) {
+        for (var a = 0; a < 12; a++) { var r = a * Math.PI / 6; b += '<line x1="' + (c[0] + Math.cos(r) * 18) + '" y1="' + (c[1] + Math.sin(r) * 18) + '" x2="' + (c[0] + Math.cos(r) * 56) + '" y2="' + (c[1] + Math.sin(r) * 56) + '" stroke="' + c[2] + '" stroke-width="5" stroke-linecap="round"/>'; }
+        b += '<circle cx="' + c[0] + '" cy="' + c[1] + '" r="7" fill="' + c[2] + '"/>';
+      });
+      b += '<rect x="0" y="240" width="640" height="40" fill="#070a20"/>';
+    } else if (k === "cake") {
+      b = '<rect x="210" y="170" width="220" height="70" rx="12" fill="#fff"/><rect x="240" y="110" width="160" height="62" rx="12" fill="#ff6b9d"/>' +
+        [275, 320, 365].map(function (x) { return '<rect x="' + (x - 4) + '" y="70" width="8" height="40" fill="#6be3ff"/><ellipse cx="' + x + '" cy="62" rx="7" ry="11" fill="#ffb300"/>'; }).join("");
+    } else if (k === "sun") {
+      b = '<circle cx="320" cy="110" r="62" fill="#ffb300"/>' + '<path d="M0 220 Q80 190 160 220 T320 220 T480 220 T640 220 V280 H0Z" fill="#1fa3e8"/><path d="M0 250 Q80 225 160 250 T320 250 T480 250 T640 250 V280 H0Z" fill="#0f7ec2"/>';
+    } else {
+      b = [[120, 70, "#fff"], [220, 200, "#6be3ff"], [320, 90, "#ffd84d"], [430, 190, "#fff"], [520, 80, "#6be3ff"], [270, 140, "#ff3d81"], [380, 120, "#fff"], [560, 200, "#ffd84d"], [80, 190, "#ffd84d"]]
+        .map(function (c) { return '<circle cx="' + c[0] + '" cy="' + c[1] + '" r="14" fill="' + c[2] + '" opacity=".9"/>'; }).join("");
+    }
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 280"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + bg[0] + '"/><stop offset="1" stop-color="' + bg[1] + '"/></linearGradient></defs><rect width="640" height="280" fill="url(#g)"/>' + b + '</svg>';
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  }
+  function evImg(e) { return e.img || art(themeOf(e.title)); }
+  function readImage(file, cb) {
+    var fr = new FileReader();
+    fr.onload = function () {
+      var im = new Image();
+      im.onload = function () {
+        var sc = Math.min(1, 800 / im.width), c = document.createElement("canvas");
+        c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        cb(c.toDataURL("image/jpeg", 0.78));
+      };
+      im.onerror = function () { showToast("Bild konnte nicht gelesen werden", true); };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  }
+
   function gById(id) { return state.groups.find(function (g) { return g.id === id; }); }
   function sameName(a, b) { return a.trim().toLowerCase() === b.trim().toLowerCase(); }
   function groupsOf(name) { return state.groups.filter(function (g) { return g.members.some(function (m) { return sameName(m.name, name); }); }); }
@@ -325,7 +392,7 @@
     var list = sorted();
     document.getElementById("eventList").innerHTML = list.length ? list.map(function (e) {
       var w = whenLabel(e.date);
-      return '<li><button type="button" class="ev" data-open="' + e.id + '" aria-current="' + (e.id === selectedId) + '">' + tile(e) +
+      return '<li><button type="button" class="ev" data-open="' + e.id + '" aria-current="' + (e.id === selectedId) + '">' + tile(e) + '<img class="thumb" alt="" src="' + evImg(e) + '">' +
         '<span class="info"><strong>' + esc(e.title) + '</strong>' + (e.place ? '<span>' + esc(e.place) + '</span>' : '') +
         '<span class="when' + (w.past ? ' past' : '') + '">' + w.t + ' · ' + plural(e.people.length) + '</span></span><span class="chev" aria-hidden="true">›</span></button></li>';
     }).join("") : '<li><p class="empty">Noch keine Events. Lege oben das erste an.</p></li>';
@@ -337,6 +404,8 @@
     var w = whenLabel(sel.date);
     document.getElementById("detailHead").innerHTML =
       '<button class="back" id="backBtn" type="button">← Alle Events</button>' +
+      '<img class="cover" alt="Titelbild: ' + esc(sel.title) + '" src="' + evImg(sel) + '">' +
+      '<div class="img-actions"><button type="button" data-img-change="1">Bild ändern</button>' + (sel.img ? '<button type="button" data-img-reset="1">Standardbild</button>' : '') + '</div>' +
       '<div class="dhead">' + tile(sel) + '<div class="info"><h2>' + esc(sel.title) + '</h2>' + (sel.place ? '<span>' + esc(sel.place) + '</span>' : '') +
       '<span class="when' + (w.past ? ' past' : '') + '">' + w.t + '</span></div>' +
       '<button class="del" type="button" data-del-event="' + sel.id + '" aria-label="Event ' + esc(sel.title) + ' löschen">Event löschen</button></div>';
@@ -365,10 +434,14 @@
     var title = document.getElementById("evTitle").value.trim();
     var date = document.getElementById("evDate").value;
     if (!title || !date) return;
-    var ev = { id: uid(), title: title, date: date, place: document.getElementById("evPlace").value.trim(), people: [] };
-    state.events.push(ev); selectedId = ev.id;
-    save(); render(); e.target.reset(); document.getElementById("evDate").value = iso(0);
-    document.getElementById("peName").focus();
+    var form = e.target, file = document.getElementById("evImg").files[0], place = document.getElementById("evPlace").value.trim();
+    function done(img) {
+      var ev = { id: uid(), title: title, date: date, place: place, img: img || null, people: [] };
+      state.events.push(ev); selectedId = ev.id;
+      save(); render(); form.reset(); document.getElementById("evDate").value = iso(0);
+      document.getElementById("peName").focus();
+    }
+    if (file) readImage(file, done); else done(null);
   });
 
   document.getElementById("personForm").addEventListener("submit", function (e) {
@@ -414,6 +487,10 @@
       save(); render();
       if (added.length) { lastDeleted = { type: "bulk", eventId: sel.id, ids: added }; showToast(added.length + (added.length === 1 ? " Person" : " Personen") + " aus " + gi.name + " hinzugefügt"); }
       else { lastDeleted = null; showToast("Alle aus " + gi.name + " sind schon dabei", true); }
+    } else if (t.dataset.imgChange) {
+      document.getElementById("imgInput").click();
+    } else if (t.dataset.imgReset && sel) {
+      sel.img = null; save(); render();
     } else if (t.id === "undoBtn" && lastDeleted) {
       var u = lastDeleted;
       if (u.type === "event") { state.events.push(u.item); selectedId = u.item.id; }
@@ -423,6 +500,11 @@
       else { var ev = byId(u.eventId); if (ev) ev.people.push(u.item); }
       lastDeleted = null; document.getElementById("toast").hidden = true; save(); renderGroups(); render();
     }
+  });
+
+  document.getElementById("imgInput").addEventListener("change", function (e) {
+    var f = e.target.files[0], sel = byId(selectedId); e.target.value = "";
+    if (f && sel) readImage(f, function (d) { sel.img = d; save(); render(); });
   });
 
   document.getElementById("groupForm").addEventListener("submit", function (e) {
